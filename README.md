@@ -1,3 +1,7 @@
+[![Build](https://github.com/novr/swift-openapi-compute/actions/workflows/swift.yml/badge.svg)](https://github.com/novr/swift-openapi-compute/actions/workflows/swift.yml)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fnovr%2Fswift-openapi-compute%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/novr/swift-openapi-compute)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fnovr%2Fswift-openapi-compute%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/novr/swift-openapi-compute)
+
 # Swift OpenAPI Compute
 
 This package provides Compute Bindings for the [OpenAPI generator](https://github.com/apple/swift-openapi-generator).
