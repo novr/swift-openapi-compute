@@ -1,5 +1,6 @@
 import Foundation
 import OpenAPIRuntime
+import HTTPTypes
 import Compute
 
 public final class ComputeTransport {
@@ -12,38 +13,36 @@ public final class ComputeTransport {
 
 extension ComputeTransport: ServerTransport {
     public func register(
-        _ handler: @escaping @Sendable (OpenAPIRuntime.Request, OpenAPIRuntime.ServerRequestMetadata) async throws -> OpenAPIRuntime.Response,
-        method: OpenAPIRuntime.HTTPMethod,
-        path: [OpenAPIRuntime.RouterPathComponent],
-        queryItemNames: Set<String>) throws {
-            router.on(
-                try Compute.HTTPMethod(method),
-                Self.makeComputePath(from: path)
+        _ handler: @Sendable @escaping (HTTPRequest, HTTPBody?, ServerRequestMetadata) async throws -> (HTTPResponse, HTTPBody?),
+        method: HTTPRequest.Method,
+        path: String
+    ) throws {
+        router.on(
+            method,
+            path
             ) { computeRequest in
-                let request = try await OpenAPIRuntime.Request(computeRequest)
+                let request = try await HTTPTypes.HTTPRequest(computeRequest)
+                let body = try await OpenAPIRuntime.HTTPBody(computeRequest)
                 let requestMetadata = try OpenAPIRuntime.ServerRequestMetadata(
                     from: computeRequest,
-                    forPath: path,
-                    extractingQueryItemNamed: queryItemNames
+                    forPath: path
                 )
-                return try await handler(request, requestMetadata)
+                return try await handler(request, body, requestMetadata)
             }
         }
-
-    /// Make compute path string from RouterPathComponent array
-    static func makeComputePath(from path: [OpenAPIRuntime.RouterPathComponent]) -> String {
-        path.map(\.computePathComponent).joined(separator: "/")
-    }
 }
 
-extension RouterPathComponent {
-    /// Return path component as String
-    var computePathComponent: String {
-        switch self {
-        case .constant(let string):
-            return string
-        case .parameter(let parameter):
-            return ":\(parameter)"
+extension [PathComponent] {
+    init(_ path: String) {
+        self = path.split(
+            separator: "/",
+            omittingEmptySubsequences: false
+        ).map { parameter in
+            if parameter.first == "{", parameter.last == "}" {
+                return .parameter(String(parameter.dropFirst().dropLast()))
+            } else {
+                return .constant(String(parameter))
+            }
         }
     }
 }
@@ -52,17 +51,26 @@ extension Compute.Router {
 
     @discardableResult
     func on(
-        _ method: Compute.HTTPMethod,
+        _ method: HTTPRequest.Method,
         _ path: String,
-        use closure: @escaping (IncomingRequest) async throws -> OpenAPIRuntime.Response
+        use closure: @escaping (IncomingRequest) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?)
     ) -> Compute.Router {
         let handler: (IncomingRequest, OutgoingResponse) async throws -> Void =  { request, response in
             let result = try await closure(request)
-            response.status(result.statusCode)
-            for header in result.headerFields {
-                response.header(header.name, header.value)
+            response.status(result.0.status.code)
+            result.0.headerFields.forEach {
+                response.header($0.name.rawName, $0.value)
             }
-            try await response.send(result.body)
+            guard let body = result.1 else {
+                try await response.end()
+                return
+            }
+            switch body.length {
+            case let .known(length):
+                try await response.send(Data(collecting: body, upTo: length))
+            case .unknown:
+                try await response.send(Data(collecting: body, upTo: .max))
+            }
         }
         switch method {
         case .get:
@@ -98,54 +106,51 @@ enum ComputeTransportError: Error {
     case missingRequiredPathParameter(String)
 }
 
-extension Compute.PathComponent {
-    init(_ pathComponent: OpenAPIRuntime.RouterPathComponent) {
-        switch pathComponent {
-        case .constant(let value): self = .constant(value)
-        case .parameter(let value): self = .parameter(value)
-        }
+extension HTTPTypes.HTTPRequest {
+    init(_ computeRequest: Compute.IncomingRequest) async throws {
+        let headerFields: HTTPTypes.HTTPFields = .init(computeRequest.headers)
+        let method = try HTTPTypes.HTTPRequest.Method(computeRequest.method)
+        let queries = computeRequest.url.query.map { "?\($0)" } ?? ""
+
+        self.init(
+            method: method,
+            scheme: computeRequest.url.scheme,
+            authority: computeRequest.url.host(),
+            path: computeRequest.url.path() + queries,
+            headerFields: headerFields
+        )
     }
 }
 
-extension OpenAPIRuntime.Request {
-    init(_ computeRequest: Compute.IncomingRequest) async throws {
-        let headerFields: [OpenAPIRuntime.HeaderField] = .init(computeRequest.headers)
-        let bodyData = try await computeRequest.body.data()
-        let method = try OpenAPIRuntime.HTTPMethod(computeRequest.method)
-
-        self.init(
-            path: computeRequest.url.path,
-            query: computeRequest.url.query,
-            method: method,
-            headerFields: headerFields,
-            body: bodyData
+extension OpenAPIRuntime.HTTPBody {
+    convenience init(_ computeRequest: Compute.IncomingRequest) async throws {
+        let contentLength = computeRequest.headers.entries().first { $0.key == "content-length"}.map { Int($0.value) }
+        await self.init(
+            try computeRequest.body.data(),
+            length: contentLength?.map { .known($0) } ?? .unknown,
+            iterationBehavior: .single
         )
     }
 }
 
 extension OpenAPIRuntime.ServerRequestMetadata {
-    init(
-        from computeRequest: Compute.IncomingRequest,
-        forPath path: [RouterPathComponent],
-        extractingQueryItemNamed queryItemNames: Set<String>
-    ) throws {
-        self.init(
-            pathParameters: try .init(from: computeRequest, forPath: path),
-            queryParameters: .init(from: computeRequest, queryItemNames: queryItemNames)
-        )
+    init(from computeRequest: Compute.IncomingRequest, forPath path: String) throws {
+        self.init(pathParameters: try .init(from: computeRequest, forPath: path))
     }
 }
 
-extension Dictionary where Key == String, Value == String {
-    init(from computeRequest: Compute.IncomingRequest, forPath path: [RouterPathComponent]) throws {
-        let keysAndValues = try path.compactMap { item -> (String, String)? in
-            guard case let .parameter(name) = item else {
+extension Dictionary<String, Substring> {
+    init(from computeRequest: Compute.IncomingRequest, forPath path: String) throws {
+        let keysAndValues = try [PathComponent](path).compactMap { component throws -> String? in
+            guard case let .parameter(parameter) = component else {
                 return nil
             }
-            guard let value = computeRequest.pathParams.get(name) else {
-                throw ComputeTransportError.missingRequiredPathParameter(name)
+            return parameter
+        }.map { parameter -> (String, Substring) in
+            guard let value = computeRequest.searchParams[parameter] else {
+                throw ComputeTransportError.missingRequiredPathParameter(parameter)
             }
-            return (name, value)
+            return (parameter, Substring(value))
         }
         let pathParameterDictionary = try Dictionary(keysAndValues, uniquingKeysWith: { _, _ in
             throw ComputeTransportError.duplicatePathParameter(keysAndValues.map(\.0))
@@ -154,25 +159,18 @@ extension Dictionary where Key == String, Value == String {
     }
 }
 
-extension Array where Element == URLQueryItem {
-    init(from computeRequest: Compute.IncomingRequest, queryItemNames: Set<String>) {
-        let queryParameters = queryItemNames.sorted().compactMap { name -> URLQueryItem? in
-            guard let value = computeRequest.searchParams[name] else {
+extension HTTPTypes.HTTPFields {
+    init(_ headers: Compute.Headers) {
+        self.init(headers.entries().compactMap { name, value in
+            guard let name = HTTPField.Name(name) else {
                 return nil
             }
-            return .init(name: name, value: value)
-        }
-        self = queryParameters
+            return HTTPField(name: name, value: value)
+        })
     }
 }
 
-extension Array where Element == OpenAPIRuntime.HeaderField {
-    init(_ headers: Compute.Headers) {
-        self = headers.entries().map { .init(name: $0.key, value: $0.value) }
-    }
-}
-
-extension OpenAPIRuntime.HTTPMethod {
+extension HTTPTypes.HTTPRequest.Method {
     init(_ method: Compute.HTTPMethod) throws {
         switch method {
         case .get: self = .get
@@ -188,7 +186,7 @@ extension OpenAPIRuntime.HTTPMethod {
 }
 
 extension Compute.HTTPMethod {
-    init(_ method: OpenAPIRuntime.HTTPMethod) throws {
+    init(_ method: HTTPTypes.HTTPRequest.Method) throws {
         switch method {
         case .get: self = .get
         case .put: self = .put

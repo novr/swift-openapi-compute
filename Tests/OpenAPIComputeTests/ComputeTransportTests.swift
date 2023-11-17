@@ -2,6 +2,7 @@ import XCTest
 @testable import OpenAPICompute
 import Compute
 import OpenAPIRuntime
+import HTTPTypes
 
 final class ComputeTransportTests: XCTestCase {
 
@@ -29,7 +30,7 @@ final class ComputeTransportTests: XCTestCase {
             XCTAssertEqual(name, "TRACE")
         }
 
-        try XCTAssert(function: OpenAPIRuntime.HTTPMethod.init(_:), behavesAccordingTo: [
+        try XCTAssert(function: HTTPTypes.HTTPRequest.Method.init(_:), behavesAccordingTo: [
             (.get, .get),
             (.put, .put),
             (.post, .post),
@@ -38,7 +39,7 @@ final class ComputeTransportTests: XCTestCase {
             (.head, .head),
             (.patch, .patch),
         ])
-        try XCTAssertThrowsError(OpenAPIRuntime.HTTPMethod(.query)) {
+        try XCTAssertThrowsError(HTTPTypes.HTTPRequest.Method(.query)) {
             guard case let ComputeTransportError.unsupportedHTTPMethod(name) = $0 else {
                 XCTFail()
                 return
