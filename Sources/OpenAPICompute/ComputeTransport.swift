@@ -115,8 +115,8 @@ extension HTTPTypes.HTTPRequest {
         self.init(
             method: method,
             scheme: computeRequest.url.scheme,
-            authority: computeRequest.url.host(),
-            path: computeRequest.url.path() + queries,
+            authority: computeRequest.url.host,
+            path: computeRequest.url.path + queries,
             headerFields: headerFields
         )
     }
