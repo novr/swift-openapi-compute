@@ -67,7 +67,7 @@ extension Compute.Router {
             }
             switch body.length {
             case let .known(length):
-                try await response.send(Data(collecting: body, upTo: length))
+                try await response.send(Data(collecting: body, upTo: Int(length)))
             case .unknown:
                 try await response.send(Data(collecting: body, upTo: .max))
             }
@@ -124,7 +124,7 @@ extension HTTPTypes.HTTPRequest {
 
 extension OpenAPIRuntime.HTTPBody {
     convenience init(_ computeRequest: Compute.IncomingRequest) async throws {
-        let contentLength = computeRequest.headers.entries().first { $0.key == "content-length"}.map { Int($0.value) }
+        let contentLength = computeRequest.headers.entries().first { $0.key == "content-length"}.map { Int64($0.value) }
         await self.init(
             try computeRequest.body.data(),
             length: contentLength?.map { .known($0) } ?? .unknown,

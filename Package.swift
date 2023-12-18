@@ -1,4 +1,4 @@
-// swift-tools-version: 5.8
+// swift-tools-version: 5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -18,7 +18,7 @@ let package = Package(
             targets: ["OpenAPICompute"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "0.3.6"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "1.1.0"),
         .package(url: "https://github.com/swift-cloud/Compute", from: "2.18.0"),
     ],
     targets: [
@@ -27,7 +27,7 @@ let package = Package(
         .target(
             name: "OpenAPICompute",
             dependencies: [
-                .product(name: "Compute", package: "Compute"),
+                "Compute",
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
             ]),
         .testTarget(
