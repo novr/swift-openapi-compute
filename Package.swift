@@ -18,8 +18,8 @@ let package = Package(
             targets: ["OpenAPICompute"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "1.1.0"),
-        .package(url: "https://github.com/swift-cloud/Compute", from: "2.18.0"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "1.3.0"),
+        .package(url: "https://github.com/swift-cloud/Compute", from: "3.0.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
