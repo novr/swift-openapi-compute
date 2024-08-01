@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-14
     env:
       XCODE_VERSION: '15.0'  
     steps:
