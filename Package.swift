@@ -18,7 +18,7 @@ let package = Package(
             targets: ["OpenAPICompute"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime.git", from: "1.7.0"),
         .package(url: "https://github.com/swift-cloud/Compute", from: "3.1.0"),
     ],
     targets: [
